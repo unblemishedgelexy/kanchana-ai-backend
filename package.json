@@ -1,0 +1,30 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Kanchana AI production-ready backend",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --coverage"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@imagekit/nodejs": "^7.3.0",
+    "@pinecone-database/pinecone": "^4.1.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "google-auth-library": "^9.15.1",
+    "helmet": "^8.1.0",
+    "mongoose": "^9.2.1",
+    "nodemon": "^3.1.14",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.1.1"
+  }
+}

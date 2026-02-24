@@ -1,0 +1,14 @@
+process.env.NODE_ENV = "test";
+process.env.SKIP_DOTENV = "true";
+process.env.MONGODB_URI = "";
+process.env.GEMINI_API_KEY = "";
+process.env.APP_API_KEY = "";
+process.env.APP_CLIENT_SECRET = "";
+process.env.GOOGLE_CLIENT_ID = "";
+process.env.GOOGLE_CLIENT_SECRET = "";
+process.env.GOOGLE_OAUTH_REDIRECT_URI = "";
+process.env.IMAGEKIT_PUBLIC_KEY = "";
+process.env.IMAGEKIT_PRIVATE_KEY = "";
+process.env.IMAGEKIT_URL_ENDPOINT = "";
+process.env.PAYPAL_CLIENT_ID = "";
+process.env.PAYPAL_CLIENT_SECRET = "";
