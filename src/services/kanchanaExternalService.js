@@ -23,15 +23,15 @@ const normalizeHistory = (history = []) =>
   history
     .slice(-MAX_HISTORY_ITEMS)
     .map((item) => {
-      const text = String(item?.text || "").trim();
-      if (!text) {
+      const content = String(item?.content || item?.text || "").trim();
+      if (!content) {
         return null;
       }
 
       const role =
         item?.role === "kanchana" || item?.role === "assistant" ? "assistant" : "user";
 
-      return { role, text };
+      return { role, content };
     })
     .filter(Boolean);
 

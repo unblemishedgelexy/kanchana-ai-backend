@@ -8,6 +8,7 @@ const IMAGEKIT_KEYS = [
 
 const GEMINI_KEYS = ["GEMINI_API_KEY", "GEMINI_CHAT_MODEL", "GEMINI_IMAGE_MODEL", "GEMINI_EMBED_MODEL"];
 const GOOGLE_KEYS = ["GOOGLE_CLIENT_ID"];
+const EXTERNAL_KEYS = ["APP_API_KEY", "APP_CLIENT_SECRET", "KANCHANA_API_BASE_URL"];
 
 const clearEnvKeys = (keys) => {
   keys.forEach((key) => {
@@ -305,5 +306,49 @@ describe("geminiService", () => {
     const image = await service.generateImageResponse({ prompt: "draw moon" });
     expect(image.text).toContain("image ready");
     expect(image.imageUrl).toBe("data:image/png;base64,abcd1234");
+  });
+});
+
+describe("kanchanaExternalService", () => {
+  it("should send history using content field for ai-model compatibility", async () => {
+    clearEnvKeys(EXTERNAL_KEYS);
+    process.env.APP_API_KEY = "app-key";
+    process.env.APP_CLIENT_SECRET = "client-secret";
+    process.env.KANCHANA_API_BASE_URL = "https://ai.example.com";
+
+    jest.resetModules();
+    const service = await import("../src/services/kanchanaExternalService.js");
+
+    const fetchMock = jest.fn().mockResolvedValue(
+      makeJsonResponse({
+        payload: {
+          reply: "ok reply",
+        },
+      })
+    );
+    global.fetch = fetchMock;
+
+    const reply = await service.generateExternalFreeReply({
+      message: "hello",
+      history: [
+        { role: "user", text: "user turn one" },
+        { role: "kanchana", text: "assistant turn one" },
+      ],
+      context: {
+        mode: "Lovely",
+      },
+    });
+
+    expect(reply).toBe("ok reply");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const [calledUrl, calledOptions] = fetchMock.mock.calls[0];
+    expect(calledUrl).toBe("https://ai.example.com/v1/chat");
+
+    const body = JSON.parse(calledOptions.body);
+    expect(body.history).toEqual([
+      { role: "user", content: "user turn one" },
+      { role: "assistant", content: "assistant turn one" },
+    ]);
   });
 });
