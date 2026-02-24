@@ -32,7 +32,16 @@ export const CORS_ORIGINS = Array.from(
   ])
 );
 
-export const MAX_FREE_MESSAGES = Number(process.env.MAX_FREE_MESSAGES || 50);
+export const GUEST_MODE_MESSAGE_LIMIT = Number(process.env.GUEST_MODE_MESSAGE_LIMIT || 7);
+export const FREE_MODE_MESSAGE_LIMIT = Number(
+  process.env.FREE_MODE_MESSAGE_LIMIT || process.env.MAX_FREE_MESSAGES || 10
+);
+export const FREE_DAILY_VOICE_SECONDS = Number(process.env.FREE_DAILY_VOICE_SECONDS || 300);
+export const DEFAULT_VOICE_MESSAGE_SECONDS = Number(process.env.DEFAULT_VOICE_MESSAGE_SECONDS || 60);
+export const GUEST_CHAT_RATE_LIMIT_PER_MINUTE = Number(
+  process.env.GUEST_CHAT_RATE_LIMIT_PER_MINUTE || 15
+);
+export const MAX_FREE_MESSAGES = FREE_MODE_MESSAGE_LIMIT;
 export const TOKEN_TTL_DAYS = Number(process.env.TOKEN_TTL_DAYS || 30);
 export const PASSWORD_RESET_TTL_MINUTES = Number(process.env.PASSWORD_RESET_TTL_MINUTES || 20);
 
@@ -48,6 +57,7 @@ export const APP_CLIENT_SECRET =
 
 export const VALID_MODES = ["Lovely", "Horror", "Shayari", "Chill", "Possessive", "Naughty", "Mystic"];
 export const VALID_TIERS = ["Free", "Premium"];
+export const VALID_USER_ROLES = ["normal", "host"];
 
 export const PAYPAL_MODE = process.env.PAYPAL_MODE === "live" ? "live" : "sandbox";
 export const PAYPAL_BASE_URL =

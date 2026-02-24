@@ -1,15 +1,17 @@
 import { asyncHandler } from "../utils/http.js";
 import { sendMessage, getHistoryByMode, clearHistoryByMode } from "../services/chatService.js";
-import { toSafeUser } from "../repositories/userRepository.js";
+import { toSafeUser, toGuestSafeUser } from "../repositories/userRepository.js";
 import {
   createChatDebugLogger,
   createDebugRequestId,
   previewText,
   toDebugErrorPayload,
 } from "../utils/chatDebugLogger.js";
+import { resolveGuestIdentity } from "../utils/guestIdentity.js";
+import { isHostUser } from "../utils/accessControl.js";
 
-const parseVoiceMode = (value) => value === true || value === "true" || value === 1 || value === "1";
-const getUserId = (user) => String(user?.id || user?._id || "");
+const getUserId = (user, guestIdentity = null) =>
+  String(user?.id || user?._id || guestIdentity?.guestUserId || "");
 
 const resolveRequestId = (req) => {
   const requestIdHeader = req.headers["x-request-id"];
@@ -23,8 +25,11 @@ const resolveRequestId = (req) => {
 
 export const postMessage = asyncHandler(async (req, res) => {
   const requestId = resolveRequestId(req);
-  const voiceMode = parseVoiceMode(req.body?.voiceMode);
-  const userId = getUserId(req.user);
+  const isAuthenticated = Boolean(req.user);
+  const guestIdentity = isAuthenticated ? null : resolveGuestIdentity(req);
+  const voiceMode = Boolean(req.body?.voiceMode);
+  const voiceDurationSeconds = Number(req.body?.voiceDurationSeconds || 0);
+  const userId = getUserId(req.user, guestIdentity);
   const requestedMode = req.body?.mode || req.user?.preferredMode || req.user?.mode || "Lovely";
   const rawText = String(req.body?.text || "");
   const startedAt = Date.now();
@@ -42,7 +47,11 @@ export const postMessage = asyncHandler(async (req, res) => {
     textLength: rawText.trim().length,
     textPreview: previewText(rawText),
     voiceMode,
+    voiceDurationSeconds,
+    isAuthenticated,
     tier: req.user?.tier || "Free",
+    role: req.user?.role || "normal",
+    isHost: isHostUser(req.user),
     messageCount: Number(req.user?.messageCount || 0),
   });
 
@@ -50,9 +59,12 @@ export const postMessage = asyncHandler(async (req, res) => {
   try {
     result = await sendMessage({
       user: req.user,
+      isAuthenticated,
+      guestIdentity,
       mode: req.body?.mode,
       text: rawText,
       voiceMode,
+      voiceDurationSeconds,
       debug: {
         requestId,
         logger,
@@ -81,7 +93,7 @@ export const postMessage = asyncHandler(async (req, res) => {
     assistantMessage: result.assistantMessage,
     usage: result.usage,
     mode: result.safeMode,
-    user: toSafeUser(req.user),
+    user: req.user ? toSafeUser(req.user) : toGuestSafeUser({ mode: result.safeMode }),
   });
 });
 

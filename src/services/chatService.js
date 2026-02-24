@@ -1,4 +1,10 @@
-import { MAX_FREE_MESSAGES, VALID_MODES } from "../config.js";
+import {
+  DEFAULT_VOICE_MESSAGE_SECONDS,
+  FREE_DAILY_VOICE_SECONDS,
+  FREE_MODE_MESSAGE_LIMIT,
+  GUEST_MODE_MESSAGE_LIMIT,
+  VALID_MODES,
+} from "../config.js";
 import { HttpError } from "../utils/http.js";
 import { createSha256 } from "../utils/crypto.js";
 import {
@@ -8,7 +14,18 @@ import {
   removeByUserMode,
   normalizeMessageId,
 } from "../repositories/messageRepository.js";
-import { incrementMessageCount, save } from "../repositories/userRepository.js";
+import {
+  addVoiceUsageSeconds,
+  getModeMessageCount,
+  getVoiceUsageSecondsForDate,
+  incrementMessageCount,
+  incrementModeMessageCount,
+  save,
+} from "../repositories/userRepository.js";
+import {
+  getByFingerprintMode,
+  incrementGuestMessageCount,
+} from "../repositories/guestUsageRepository.js";
 import { encryptForUser, decryptForUser } from "./encryptionService.js";
 import { generateChatReply, generateImageResponse } from "./geminiService.js";
 import { generateExternalFreeReply } from "./kanchanaExternalService.js";
@@ -23,8 +40,84 @@ import {
   previewText,
   toDebugErrorPayload,
 } from "../utils/chatDebugLogger.js";
+import { hasPremiumAccess, isHostUser, isPremiumUser } from "../utils/accessControl.js";
 
 const IMAGE_REQUEST_REGEX = /show me|draw|image of|picture of|dikhao|banao|tasveer/i;
+
+const toDateKeyUtc = (date = new Date()) => {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const throwCodeError = (statusCode, code, message, details = {}) => {
+  const error = new HttpError(statusCode, message, {
+    code,
+    ...details,
+  });
+  error.code = code;
+  throw error;
+};
+
+const resolveSafeMode = ({ mode, user }) => {
+  const requestedMode = String(mode || "").trim();
+  if (requestedMode) {
+    if (!VALID_MODES.includes(requestedMode)) {
+      throwCodeError(400, "INVALID_MODE", "Invalid mode.", {
+        allowedModes: VALID_MODES,
+      });
+    }
+
+    return requestedMode;
+  }
+
+  const preferredMode = String(user?.preferredMode || user?.mode || "Lovely").trim();
+  return VALID_MODES.includes(preferredMode) ? preferredMode : "Lovely";
+};
+
+const resolveLimitProfile = ({ isAuthenticated, user }) => {
+  const isHost = isHostUser(user);
+  const isPremium = isPremiumUser(user);
+
+  if (!isAuthenticated) {
+    return {
+      limitType: "guest",
+      modeLimit: GUEST_MODE_MESSAGE_LIMIT,
+      isPremium: false,
+      isHost: false,
+      isLimited: true,
+    };
+  }
+
+  if (isHost) {
+    return {
+      limitType: "host",
+      modeLimit: null,
+      isPremium,
+      isHost: true,
+      isLimited: false,
+    };
+  }
+
+  if (isPremium) {
+    return {
+      limitType: "premium",
+      modeLimit: null,
+      isPremium: true,
+      isHost: false,
+      isLimited: false,
+    };
+  }
+
+  return {
+    limitType: "free",
+    modeLimit: FREE_MODE_MESSAGE_LIMIT,
+    isPremium: false,
+    isHost: false,
+    isLimited: true,
+  };
+};
 
 const toClientMessage = (userId, messageRecord) => {
   const text = decryptForUser(userId, {
@@ -104,11 +197,43 @@ const buildMemoryContext = async ({ userId, mode, text }) => {
     .filter(Boolean);
 };
 
-export const sendMessage = async ({ user, mode, text, voiceMode = false, debug = {} }) => {
-  const safeMode = VALID_MODES.includes(mode) ? mode : user.preferredMode || user.mode || "Lovely";
+export const sendMessage = async ({
+  user = null,
+  isAuthenticated = Boolean(user),
+  guestIdentity = null,
+  mode,
+  text,
+  voiceMode = false,
+  voiceDurationSeconds = DEFAULT_VOICE_MESSAGE_SECONDS,
+  debug = {},
+}) => {
+  const authenticated = Boolean(isAuthenticated && user);
+  const actorUser =
+    user ||
+    {
+      id: guestIdentity?.guestUserId || "guest_unknown",
+      tier: "Free",
+      role: "normal",
+      isHost: false,
+      preferredMode: "Lovely",
+    };
+  const safeMode = resolveSafeMode({ mode, user: actorUser });
   const safeText = String(text || "").trim();
-  const userId = String(user.id || user._id || "unknown");
+  const normalizedVoiceMode = Boolean(voiceMode);
+  const requestedVoiceDuration = Number(voiceDurationSeconds);
+  const normalizedVoiceDuration = Number.isFinite(requestedVoiceDuration)
+    ? requestedVoiceDuration
+    : DEFAULT_VOICE_MESSAGE_SECONDS;
+  const safeVoiceDurationSeconds = Math.max(
+    1,
+    Math.min(600, Math.floor(normalizedVoiceDuration))
+  );
+  const userId = String(actorUser.id || actorUser._id || guestIdentity?.guestUserId || "unknown");
   const startedAt = Date.now();
+  const limitProfile = resolveLimitProfile({
+    isAuthenticated: authenticated,
+    user: actorUser,
+  });
 
   const logger =
     debug?.logger ||
@@ -122,7 +247,9 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
   logger.event("validation_started", {
     textLength: safeText.length,
     textPreview: previewText(safeText),
-    voiceMode,
+    voiceMode: normalizedVoiceMode,
+    voiceDurationSeconds: safeVoiceDurationSeconds,
+    limitType: limitProfile.limitType,
   });
 
   try {
@@ -134,18 +261,71 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
       throw new HttpError(400, "Message is too long.");
     }
 
-    const currentCount = Number(user.messageCount || 0);
-    const isPremium = user.tier === "Premium";
-    if (!isPremium && currentCount >= MAX_FREE_MESSAGES) {
-      throw new HttpError(403, "Free tier limit reached. Upgrade to premium to continue.", {
-        code: "FREE_TIER_LIMIT_REACHED",
-      });
+    if (!authenticated && !guestIdentity?.fingerprintHash) {
+      throw new HttpError(500, "Guest identity could not be resolved.");
+    }
+
+    if (normalizedVoiceMode && !authenticated) {
+      throwCodeError(401, "VOICE_LOGIN_REQUIRED", "Voice is available only after login.");
+    }
+
+    const guestUsage = authenticated
+      ? null
+      : await getByFingerprintMode({
+          fingerprintHash: guestIdentity.fingerprintHash,
+          mode: safeMode,
+          metadata: guestIdentity.metadata,
+        });
+
+    let modeMessageCount = authenticated
+      ? getModeMessageCount(actorUser, safeMode)
+      : Number(guestUsage?.messageCount || 0);
+
+    if (limitProfile.isLimited && modeMessageCount >= Number(limitProfile.modeLimit || 0)) {
+      throwCodeError(
+        403,
+        "MODE_LIMIT_REACHED",
+        "Message limit reached for this mode. Upgrade to continue unlimited chat.",
+        {
+          mode: safeMode,
+          modeLimit: limitProfile.modeLimit,
+          messageCount: modeMessageCount,
+          remainingMessages: 0,
+          limitType: limitProfile.limitType,
+        }
+      );
+    }
+
+    const voiceUsageDateKey = toDateKeyUtc();
+    const appliesFreeVoiceLimit = authenticated && limitProfile.limitType === "free" && normalizedVoiceMode;
+    let dailyVoiceSecondsUsed = appliesFreeVoiceLimit
+      ? getVoiceUsageSecondsForDate(actorUser, voiceUsageDateKey)
+      : 0;
+
+    if (
+      appliesFreeVoiceLimit &&
+      dailyVoiceSecondsUsed + safeVoiceDurationSeconds > FREE_DAILY_VOICE_SECONDS
+    ) {
+      const remainingVoiceSeconds = Math.max(0, FREE_DAILY_VOICE_SECONDS - dailyVoiceSecondsUsed);
+      throwCodeError(
+        403,
+        "DAILY_VOICE_LIMIT_REACHED",
+        "Daily voice limit reached for free users.",
+        {
+          dailyLimitSeconds: FREE_DAILY_VOICE_SECONDS,
+          secondsUsed: dailyVoiceSecondsUsed,
+          remainingVoiceSeconds,
+          requestedVoiceSeconds: safeVoiceDurationSeconds,
+          limitType: limitProfile.limitType,
+        }
+      );
     }
 
     logger.event("validation_passed", {
-      isPremium,
-      currentCount,
-      maxFreeMessages: MAX_FREE_MESSAGES,
+      limitType: limitProfile.limitType,
+      modeMessageCount,
+      modeLimit: limitProfile.modeLimit,
+      dailyVoiceSecondsUsed,
       vectorMemoryEnabled,
     });
 
@@ -161,8 +341,29 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
       role: "user",
     });
 
+    if (authenticated) {
+      incrementMessageCount(actorUser);
+      incrementModeMessageCount(actorUser, safeMode);
+      modeMessageCount = getModeMessageCount(actorUser, safeMode);
+
+      if (appliesFreeVoiceLimit) {
+        addVoiceUsageSeconds(actorUser, voiceUsageDateKey, safeVoiceDurationSeconds);
+        dailyVoiceSecondsUsed = getVoiceUsageSecondsForDate(actorUser, voiceUsageDateKey);
+      }
+
+      await save(actorUser);
+    } else {
+      const updatedGuestUsage = await incrementGuestMessageCount({
+        fingerprintHash: guestIdentity.fingerprintHash,
+        mode: safeMode,
+        metadata: guestIdentity.metadata,
+      });
+      modeMessageCount = Number(updatedGuestUsage?.messageCount || modeMessageCount + 1);
+    }
+
     const recentHistory = await loadHistory({ userId, mode: safeMode, limit: 12 });
-    const memoryContext = isPremium
+    const hasUnlimitedAccess = hasPremiumAccess(actorUser);
+    const memoryContext = hasUnlimitedAccess
       ? await buildMemoryContext({ userId, mode: safeMode, text: safeText })
       : [];
     const imageRequested = IMAGE_REQUEST_REGEX.test(safeText);
@@ -171,12 +372,13 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
       historyCount: recentHistory.length,
       memoryCount: memoryContext.length,
       imageRequested,
+      hasUnlimitedAccess,
     });
 
     let assistantText = "";
     let imageUrl = "";
-    const useGeminiForChat = isPremium || voiceMode;
-    const useGeminiForImage = isPremium;
+    const useGeminiForChat = hasUnlimitedAccess || normalizedVoiceMode;
+    const useGeminiForImage = hasUnlimitedAccess;
 
     if (imageRequested && useGeminiForImage) {
       logger.event("image_generation_started", {
@@ -215,7 +417,7 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
     } else if (useGeminiForChat) {
       if (imageRequested) {
         logger.event("image_request_redirected_to_chat", {
-          reason: "gemini_image_reserved_for_premium",
+          reason: "gemini_image_reserved_for_unlimited",
         });
       }
 
@@ -223,16 +425,16 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
         provider: "gemini",
         historyCount: recentHistory.length,
         memoryCount: memoryContext.length,
-        voiceMode,
+        voiceMode: normalizedVoiceMode,
       });
 
       assistantText = await generateChatReply({
-        user,
+        user: actorUser,
         mode: safeMode,
         inputText: safeText,
         history: recentHistory,
         memoryContext,
-        voiceMode,
+        voiceMode: normalizedVoiceMode,
         debug: logger,
       });
 
@@ -244,7 +446,7 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
     } else {
       if (imageRequested) {
         logger.event("image_request_redirected_to_chat", {
-          reason: "free_tier_external_provider",
+          reason: "external_provider_no_image_generation",
         });
       }
 
@@ -263,7 +465,7 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
         history: providerHistory,
         context: {
           mode: safeMode,
-          tier: user?.tier || "Free",
+          tier: actorUser?.tier || "Free",
           voiceMode: false,
         },
         debug: logger,
@@ -289,7 +491,7 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
       hasImageUrl: Boolean(imageUrl),
     });
 
-    if (isPremium && vectorMemoryEnabled) {
+    if (hasUnlimitedAccess && vectorMemoryEnabled) {
       try {
         await Promise.all([
           upsertMessageVector({
@@ -317,8 +519,19 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
       }
     }
 
-    incrementMessageCount(user);
-    await save(user);
+    const usage = {
+      messageCount: modeMessageCount,
+      maxFreeMessages: limitProfile.modeLimit,
+      modeLimit: limitProfile.modeLimit,
+      isPremium: limitProfile.isPremium,
+      isHost: limitProfile.isHost,
+      limitType: limitProfile.limitType,
+      ...(limitProfile.isLimited
+        ? {
+            remainingMessages: Math.max(0, Number(limitProfile.modeLimit || 0) - modeMessageCount),
+          }
+        : {}),
+    };
 
     const response = {
       userMessage: {
@@ -328,11 +541,7 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
         ...toClientMessage(userId, savedAssistantMessage),
         ...(imageUrl ? { imageUrl } : {}),
       },
-      usage: {
-        messageCount: Number(user.messageCount || 0),
-        maxFreeMessages: MAX_FREE_MESSAGES,
-        isPremium: user.tier === "Premium",
-      },
+      usage,
       safeMode,
     };
 
@@ -352,14 +561,14 @@ export const sendMessage = async ({ user, mode, text, voiceMode = false, debug =
 };
 
 export const getHistoryByMode = async ({ user, mode, limit = 40 }) => {
-  const safeMode = VALID_MODES.includes(mode) ? mode : user.preferredMode || user.mode || "Lovely";
+  const safeMode = resolveSafeMode({ mode, user });
   const userId = String(user.id || user._id);
   const messages = await loadHistory({ userId, mode: safeMode, limit });
   return { mode: safeMode, messages };
 };
 
 export const clearHistoryByMode = async ({ user, mode }) => {
-  const safeMode = VALID_MODES.includes(mode) ? mode : user.preferredMode || user.mode || "Lovely";
+  const safeMode = resolveSafeMode({ mode, user });
   const userId = String(user.id || user._id);
   const deletedCount = await removeByUserMode({ userId, mode: safeMode });
   return { mode: safeMode, deletedCount };

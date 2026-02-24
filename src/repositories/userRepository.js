@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import User from "../models/User.js";
 import { memoryStore, createMemoryUserId } from "../data/memoryStore.js";
 import { isSessionExpired } from "../utils/token.js";
+import { normalizeRole, isHostUser } from "../utils/accessControl.js";
 
 const isMongoConnected = () => mongoose.connection.readyState === 1;
 
@@ -17,11 +18,27 @@ export const toSafeUser = (user) => ({
   name: user.name,
   email: user.email,
   tier: user.tier,
+  role: normalizeRole(user),
+  isHost: isHostUser(user),
   mode: user.preferredMode || user.mode || "Lovely",
   messageCount: Number(user.messageCount || 0),
   profileImageUrl: user.profileImageUrl || "",
   upgradeAssetUrl: user.upgradeAssetUrl || "",
   isAuthenticated: true,
+});
+
+export const toGuestSafeUser = ({ mode = "Lovely" } = {}) => ({
+  id: "",
+  name: "Guest",
+  email: "",
+  tier: "Free",
+  role: "normal",
+  isHost: false,
+  mode: String(mode || "Lovely"),
+  messageCount: 0,
+  profileImageUrl: "",
+  upgradeAssetUrl: "",
+  isAuthenticated: false,
 });
 
 export const createUser = async ({ name, email, passwordHash = "", googleSub = "" }) => {
@@ -34,8 +51,15 @@ export const createUser = async ({ name, email, passwordHash = "", googleSub = "
       passwordHash: String(passwordHash || ""),
       googleSub: String(googleSub || ""),
       tier: "Free",
+      role: "normal",
+      isHost: false,
       preferredMode: "Lovely",
       messageCount: 0,
+      modeMessageCounts: {},
+      voiceUsage: {
+        dateKey: "",
+        secondsUsed: 0,
+      },
       profileImageUrl: "",
       upgradeAssetUrl: "",
       activeTokens: [],
@@ -51,8 +75,15 @@ export const createUser = async ({ name, email, passwordHash = "", googleSub = "
     passwordHash: String(passwordHash || ""),
     googleSub: String(googleSub || ""),
     tier: "Free",
+    role: "normal",
+    isHost: false,
     preferredMode: "Lovely",
     messageCount: 0,
+    modeMessageCounts: {},
+    voiceUsage: {
+      dateKey: "",
+      secondsUsed: 0,
+    },
     profileImageUrl: "",
     upgradeAssetUrl: "",
     activeTokens: [],
@@ -169,6 +200,20 @@ export const setTier = (user, tier) => {
   return user;
 };
 
+export const setRole = (user, role) => {
+  const safeRole = String(role || "").trim().toLowerCase() === "host" ? "host" : "normal";
+  user.role = safeRole;
+  user.isHost = safeRole === "host";
+  return user;
+};
+
+export const setIsHost = (user, isHost) => {
+  const safeIsHost = Boolean(isHost);
+  user.isHost = safeIsHost;
+  user.role = safeIsHost ? "host" : "normal";
+  return user;
+};
+
 export const setPreferredMode = (user, mode) => {
   user.preferredMode = mode;
   return user;
@@ -191,6 +236,86 @@ export const setGoogleSub = (user, googleSub) => {
 
 export const incrementMessageCount = (user) => {
   user.messageCount = Number(user.messageCount || 0) + 1;
+  return user;
+};
+
+const getModeCounterStore = (user) => {
+  if (!user.modeMessageCounts) {
+    user.modeMessageCounts = {};
+  }
+
+  return user.modeMessageCounts;
+};
+
+export const getModeMessageCount = (user, mode) => {
+  const safeMode = String(mode || "").trim();
+  if (!safeMode) {
+    return 0;
+  }
+
+  const store = getModeCounterStore(user);
+  if (typeof store.get === "function") {
+    return Number(store.get(safeMode) || 0);
+  }
+
+  return Number(store[safeMode] || 0);
+};
+
+export const incrementModeMessageCount = (user, mode) => {
+  const safeMode = String(mode || "").trim();
+  if (!safeMode) {
+    return user;
+  }
+
+  const store = getModeCounterStore(user);
+  const nextCount = getModeMessageCount(user, safeMode) + 1;
+
+  if (typeof store.set === "function") {
+    store.set(safeMode, nextCount);
+  } else {
+    store[safeMode] = nextCount;
+  }
+
+  return user;
+};
+
+const getVoiceUsageStore = (user) => {
+  if (!user.voiceUsage || typeof user.voiceUsage !== "object") {
+    user.voiceUsage = {
+      dateKey: "",
+      secondsUsed: 0,
+    };
+  }
+
+  return user.voiceUsage;
+};
+
+export const getVoiceUsageSecondsForDate = (user, dateKey) => {
+  const safeDateKey = String(dateKey || "").trim();
+  const voiceUsage = getVoiceUsageStore(user);
+
+  if (!safeDateKey || voiceUsage.dateKey !== safeDateKey) {
+    return 0;
+  }
+
+  return Number(voiceUsage.secondsUsed || 0);
+};
+
+export const addVoiceUsageSeconds = (user, dateKey, seconds) => {
+  const safeDateKey = String(dateKey || "").trim();
+  const incrementBy = Math.max(0, Number(seconds || 0));
+  const voiceUsage = getVoiceUsageStore(user);
+
+  if (!safeDateKey) {
+    return user;
+  }
+
+  if (voiceUsage.dateKey !== safeDateKey) {
+    voiceUsage.dateKey = safeDateKey;
+    voiceUsage.secondsUsed = 0;
+  }
+
+  voiceUsage.secondsUsed = Number(voiceUsage.secondsUsed || 0) + incrementBy;
   return user;
 };
 

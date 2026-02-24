@@ -16,8 +16,9 @@ export const errorHandler = (error, _req, res, _next) => {
     message: hasExplicitHttpMessage ? error.message : "Something went wrong on server.",
   };
 
-  if (error?.code) {
-    response.code = error.code;
+  const errorCode = error?.code || error?.details?.code || "";
+  if (errorCode) {
+    response.code = errorCode;
   }
 
   if (error?.details) {

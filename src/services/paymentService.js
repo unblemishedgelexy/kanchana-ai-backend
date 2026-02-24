@@ -23,6 +23,7 @@ import {
 } from "../repositories/paymentRepository.js";
 import { findById, toSafeUser } from "../repositories/userRepository.js";
 import { markPremium } from "./authService.js";
+import { hasPremiumAccess, isHostUser } from "../utils/accessControl.js";
 
 const findApproveLink = (paypalPayload) =>
   (paypalPayload?.links || []).find((item) => item.rel === "approve")?.href || "";
@@ -126,9 +127,11 @@ export const getPremiumOverview = async ({ user }) => {
   const paypalConfigured = isPaypalConfigured();
   const subscriptionPlanConfigured = Boolean(PREMIUM_PAYPAL_PLAN_ID);
   const latestPayment = userId ? await findLatestByUserId(userId) : null;
+  const isHost = isHostUser(user);
+  const hasUnlimitedAccess = hasPremiumAccess(user);
 
   let nextAction = "premium_active";
-  if (user?.tier !== "Premium") {
+  if (!hasUnlimitedAccess) {
     if (!paypalConfigured) {
       nextAction = "paypal_not_configured";
     } else if (!subscriptionPlanConfigured) {
@@ -136,10 +139,14 @@ export const getPremiumOverview = async ({ user }) => {
     } else {
       nextAction = "create_order_or_subscription";
     }
+  } else if (isHost && user?.tier !== "Premium") {
+    nextAction = "host_access";
   }
 
   return {
     isPremium: user?.tier === "Premium",
+    isHost,
+    hasUnlimitedAccess,
     tier: user?.tier || "Free",
     pricing: {
       price: PREMIUM_PRICE,

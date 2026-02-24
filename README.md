@@ -4,9 +4,10 @@ Production-focused Express backend with:
 - modular architecture (`controllers`, `routes`, `services`, `repositories`)
 - ESM module runtime (`type: module`) with `tsx` dev server
 - secure auth (password + Google login + token sessions)
+- role-aware access (`normal`, `host`) with host premium bypass
 - password reset flow
 - encrypted chat history at rest (AES-GCM)
-- premium/free route guards
+- premium/free/guest/host chat and voice limits enforced in backend
 - PayPal payment + subscription (autopay) endpoints
 - ImageKit cloud storage for profile/upgrade assets and generated images
 - free tier chat via external Kanchana model API (`/v1/chat`)
@@ -58,8 +59,8 @@ Base URL: `http://localhost:5000/api`
 - `PATCH /api/auth/preferences` (auth)
 - `POST /api/auth/upgrade` (auth)
 - `GET /api/content/simple`
-- `GET /api/content/premium` (auth + premium)
-- `POST /api/chat/message` (auth)
+- `GET /api/content/premium` (auth + premium or host)
+- `POST /api/chat/message` (guest or auth)
 - `GET /api/chat/history?mode=Lovely` (auth)
 - `DELETE /api/chat/history?mode=Lovely` (auth)
 - `GET /api/media/imagekit/auth` (auth)
@@ -101,3 +102,19 @@ Base URL: `http://localhost:5000/api`
    ```
 
 If any secret key was ever shared publicly, rotate it in the provider dashboard before production use.
+
+## API Contract Updates (2026-02-24)
+
+- `/api/chat/message` now accepts guest and authenticated requests.
+- Guest chat limit is `7` messages per mode; logged-in free is `10` per mode.
+- Premium and host users are unlimited for chat and voice usage.
+- Voice for guests is blocked with `401` + `VOICE_LOGIN_REQUIRED`.
+- Structured chat/voice limit errors now include:
+  - `MODE_LIMIT_REACHED`
+  - `DAILY_VOICE_LIMIT_REACHED`
+  - `VOICE_LOGIN_REQUIRED`
+- Chat response `usage` now includes:
+  - `messageCount`, `maxFreeMessages`, `modeLimit`
+  - `isPremium`, `isHost`, `limitType`
+  - `remainingMessages` (for limited tiers)
+- User payloads now include `role` and `isHost` in addition to `tier` and `isAuthenticated`.

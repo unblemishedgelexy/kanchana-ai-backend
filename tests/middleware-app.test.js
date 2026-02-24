@@ -2,7 +2,7 @@ import request from "supertest";
 import mongoose from "mongoose";
 import { describe, it, expect, jest } from "@jest/globals";
 import { app, connectDatabase } from "../src/app.js";
-import { authRequired, premiumRequired } from "../src/middleware/auth.js";
+import { authRequired, authOptional, premiumRequired } from "../src/middleware/auth.js";
 import { notFoundHandler, errorHandler } from "../src/middleware/errorHandlers.js";
 import { HttpError } from "../src/utils/http.js";
 import { createSha256 } from "../src/utils/crypto.js";
@@ -99,6 +99,24 @@ describe("auth middleware", () => {
     const premiumNext = jest.fn();
     premiumRequired(premiumReq, premiumRes, premiumNext);
     expect(premiumNext).toHaveBeenCalledTimes(1);
+
+    const hostReq = { user: { tier: "Free", role: "host", isHost: true } };
+    const hostRes = createMockResponse();
+    const hostNext = jest.fn();
+    premiumRequired(hostReq, hostRes, hostNext);
+    expect(hostNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("authOptional should allow missing token and set null user context", async () => {
+    const req = { headers: {} };
+    const res = createMockResponse();
+    const next = jest.fn();
+
+    await authOptional(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.user).toBeNull();
+    expect(req.authToken).toBeNull();
+    expect(req.authTokenHash).toBeNull();
   });
 });
 

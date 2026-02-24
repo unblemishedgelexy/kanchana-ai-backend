@@ -2,6 +2,7 @@ import { describe, it, expect } from "@jest/globals";
 import { memoryStore } from "../src/data/memoryStore.js";
 import * as userRepo from "../src/repositories/userRepository.js";
 import * as messageRepo from "../src/repositories/messageRepository.js";
+import * as guestUsageRepo from "../src/repositories/guestUsageRepository.js";
 import * as resetTokenRepo from "../src/repositories/resetTokenRepository.js";
 import * as paymentRepo from "../src/repositories/paymentRepository.js";
 
@@ -62,9 +63,12 @@ describe("userRepository (memory)", () => {
     userRepo.setPreferredMode(user, "Shayari");
     userRepo.updateProfileName(user, "The One");
     userRepo.setTier(user, "Premium");
+    userRepo.setRole(user, "host");
     userRepo.setPasswordHash(user, "hash-2");
     userRepo.setGoogleSub(user, "google-sub");
     userRepo.incrementMessageCount(user);
+    userRepo.incrementModeMessageCount(user, "Lovely");
+    userRepo.addVoiceUsageSeconds(user, "2026-02-24", 120);
     userRepo.setProfileImageUrl(user, "https://img.example.com/a.jpg");
     userRepo.setUpgradeAssetUrl(user, "https://img.example.com/b.jpg");
 
@@ -72,9 +76,17 @@ describe("userRepository (memory)", () => {
     expect(safeUser.mode).toBe("Shayari");
     expect(safeUser.name).toBe("The One");
     expect(safeUser.tier).toBe("Premium");
+    expect(safeUser.role).toBe("host");
+    expect(safeUser.isHost).toBe(true);
     expect(safeUser.messageCount).toBe(1);
     expect(safeUser.profileImageUrl).toContain("img.example.com");
     expect(safeUser.upgradeAssetUrl).toContain("img.example.com");
+    expect(userRepo.getModeMessageCount(user, "Lovely")).toBe(1);
+    expect(userRepo.getVoiceUsageSecondsForDate(user, "2026-02-24")).toBe(120);
+
+    userRepo.setIsHost(user, false);
+    expect(user.role).toBe("normal");
+    expect(user.isHost).toBe(false);
 
     userRepo.removeSessionByHash(user, "valid-token");
     expect(user.activeTokens.length).toBe(0);
@@ -98,6 +110,61 @@ describe("userRepository (memory)", () => {
     expect(await userRepo.findBySessionTokenHash("")).toBeNull();
     expect(await userRepo.findByEmail("")).toBeNull();
     expect(await userRepo.save(null)).toBeNull();
+  });
+});
+
+describe("guestUsageRepository (memory)", () => {
+  it("should create, update and read guest usage records", async () => {
+    const record = await guestUsageRepo.getByFingerprintMode({
+      fingerprintHash: "fp-1",
+      mode: "Lovely",
+      metadata: {
+        ipHash: "ip-hash",
+      },
+    });
+    expect(record?.messageCount).toBe(0);
+
+    const incremented = await guestUsageRepo.incrementGuestMessageCount({
+      fingerprintHash: "fp-1",
+      mode: "Lovely",
+      metadata: {
+        deviceHash: "device-hash",
+      },
+    });
+    expect(incremented?.messageCount).toBe(1);
+
+    await guestUsageRepo.setGuestMessageCount({
+      fingerprintHash: "fp-1",
+      mode: "Lovely",
+      count: 7,
+    });
+
+    const voiceUsed = await guestUsageRepo.addGuestVoiceUsageSeconds({
+      fingerprintHash: "fp-1",
+      mode: "Lovely",
+      dateKey: "2026-02-24",
+      seconds: 90,
+    });
+    expect(voiceUsed?.voiceSecondsUsed).toBe(90);
+
+    const voiceAfterRead = await guestUsageRepo.getGuestVoiceUsageSeconds({
+      fingerprintHash: "fp-1",
+      mode: "Lovely",
+      dateKey: "2026-02-24",
+    });
+    expect(voiceAfterRead).toBe(90);
+
+    const fetched = await guestUsageRepo.getByFingerprintMode({
+      fingerprintHash: "fp-1",
+      mode: "Lovely",
+    });
+    expect(fetched?.messageCount).toBe(7);
+
+    const unknown = await guestUsageRepo.getByFingerprintMode({
+      fingerprintHash: "",
+      mode: "Lovely",
+    });
+    expect(unknown).toBeNull();
   });
 });
 

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --coverage"
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --coverage",
+    "migrate:add-role-and-usage": "node src/migrations/20260224-add-role-and-usage-fields.js"
   },
   "keywords": [],
   "author": "",

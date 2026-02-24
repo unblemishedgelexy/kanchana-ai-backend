@@ -8,6 +8,7 @@ beforeEach(() => {
   memoryStore.nextId = 1;
   memoryStore.users = [];
   memoryStore.messages = [];
+  memoryStore.guestUsages = [];
   memoryStore.resetTokens = [];
   memoryStore.payments = [];
 

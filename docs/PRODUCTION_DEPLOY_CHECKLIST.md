@@ -53,7 +53,11 @@ AI required:
 - `APP_API_KEY=<kanchana-api-key>`
 - `APP_CLIENT_SECRET=<kanchana-client-secret>`
 - `GEMINI_API_KEY=<gemini-api-key>`
-- `MAX_FREE_MESSAGES=50`
+- `GUEST_MODE_MESSAGE_LIMIT=7`
+- `FREE_MODE_MESSAGE_LIMIT=10`
+- `FREE_DAILY_VOICE_SECONDS=300`
+- `DEFAULT_VOICE_MESSAGE_SECONDS=60`
+- `GUEST_CHAT_RATE_LIMIT_PER_MINUTE=15`
 
 Google OAuth required (if enabled):
 
@@ -113,6 +117,12 @@ Expected:
 - `/api/health` -> `ok: true`
 - `/api/ping` -> `pong: true`
 - `/api/auth/google/start` -> HTTP `302` redirect to Google
+
+Migration step for existing user data (run once after deploy if upgrading an existing DB):
+
+```powershell
+npm run migrate:add-role-and-usage
+```
 
 ## 7. Post-Deploy Monitoring
 

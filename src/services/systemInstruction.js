@@ -1,3 +1,5 @@
+import { hasPremiumAccess } from "../utils/accessControl.js";
+
 const modeInstructions = {
   Lovely: "Romantic, soft and emotionally warm.",
   Horror: "Dark whispers, suspenseful but never violent.",
@@ -73,7 +75,7 @@ export const buildSystemInstruction = ({
   apiLimitsInfo = "n/a",
 }) => {
   const safeMode = mode || user?.preferredMode || "Lovely";
-  const isPremium = user?.tier === "Premium";
+  const isPremium = hasPremiumAccess(user);
   const providers = providerAvailability();
   const scopedMemory = isPremium ? memoryContext : [];
   const safeCurrentInput = sanitizeLine(currentInput);
@@ -88,7 +90,7 @@ Known AI Providers Configured:
 
 User Info:
 Name: ${user?.name || "Soul"}
-Role: ${isPremium ? "premium" : "normal"}
+Role: ${isPremium ? "premium_like" : "normal"}
 Chat Mode: ${String(safeMode).toLowerCase()}
 Voice Mode: ${voiceMode ? "true" : "false"}
 Mode Guidance: ${modeInstructions[safeMode] || modeInstructions.Lovely}

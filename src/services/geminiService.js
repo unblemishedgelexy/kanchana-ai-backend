@@ -2,12 +2,13 @@ import {
   GEMINI_CHAT_MODEL,
   GEMINI_IMAGE_MODEL,
   GEMINI_EMBED_MODEL,
-  MAX_FREE_MESSAGES,
+  FREE_MODE_MESSAGE_LIMIT,
   IS_PRODUCTION,
   AI_DEBUG_LOGS,
 } from "../config.js";
 import { HttpError } from "../utils/http.js";
 import { buildSystemInstruction } from "./systemInstruction.js";
+import { hasPremiumAccess } from "../utils/accessControl.js";
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -23,10 +24,10 @@ let lastRateLimitLogAt = 0;
 const RATE_LIMIT_LOG_COOLDOWN_MS = 15_000;
 const DEFAULT_RETRY_MS = 60_000;
 
-const getHistoryWindow = (user) => (user?.tier === "Premium" ? 10 : 5);
+const getHistoryWindow = (user) => (hasPremiumAccess(user) ? 10 : 5);
 
 const getMaxOutputTokens = ({ user, voiceMode }) => {
-  const isPremium = user?.tier === "Premium";
+  const isPremium = hasPremiumAccess(user);
   if (voiceMode) {
     return isPremium ? 140 : 96;
   }
@@ -35,13 +36,13 @@ const getMaxOutputTokens = ({ user, voiceMode }) => {
 
 const buildApiLimitsInfo = ({ user, historyWindow, maxTokens, voiceMode }) => {
   const used = Number(user?.messageCount || 0);
-  const remainingFreeMessages = Math.max(0, MAX_FREE_MESSAGES - used);
+  const remainingFreeMessages = Math.max(0, FREE_MODE_MESSAGE_LIMIT - used);
 
   return [
     `history_window=${historyWindow}`,
     `max_tokens=${maxTokens}`,
     `voice_mode=${voiceMode ? "true" : "false"}`,
-    `user_tier=${user?.tier === "Premium" ? "premium" : "normal"}`,
+    `user_tier=${hasPremiumAccess(user) ? "premium_like" : "normal"}`,
     `free_messages_remaining=${remainingFreeMessages}`,
   ].join("; ");
 };
@@ -197,7 +198,7 @@ export const generateChatReply = async ({
   const historyWindow = getHistoryWindow(user);
   const maxOutputTokens = getMaxOutputTokens({ user, voiceMode });
   const scopedHistory = Array.isArray(history) ? history.slice(-historyWindow) : [];
-  const scopedMemory = user?.tier === "Premium" ? memoryContext.slice(0, 6) : [];
+  const scopedMemory = hasPremiumAccess(user) ? memoryContext.slice(0, 6) : [];
 
   const apiLimitsInfo = buildApiLimitsInfo({
     user,

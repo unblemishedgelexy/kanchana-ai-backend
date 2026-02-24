@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { VALID_MODES, VALID_TIERS } from "../config.js";
+import { VALID_MODES, VALID_TIERS, VALID_USER_ROLES } from "../config.js";
 
 const sessionSchema = new mongoose.Schema(
   {
@@ -51,6 +51,15 @@ const userSchema = new mongoose.Schema(
       enum: VALID_TIERS,
       default: "Free",
     },
+    role: {
+      type: String,
+      enum: VALID_USER_ROLES,
+      default: "normal",
+    },
+    isHost: {
+      type: Boolean,
+      default: false,
+    },
     preferredMode: {
       type: String,
       enum: VALID_MODES,
@@ -59,6 +68,21 @@ const userSchema = new mongoose.Schema(
     messageCount: {
       type: Number,
       default: 0,
+    },
+    modeMessageCounts: {
+      type: Map,
+      of: Number,
+      default: {},
+    },
+    voiceUsage: {
+      dateKey: {
+        type: String,
+        default: "",
+      },
+      secondsUsed: {
+        type: Number,
+        default: 0,
+      },
     },
     profileImageUrl: {
       type: String,
