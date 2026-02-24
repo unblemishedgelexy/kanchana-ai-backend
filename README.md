@@ -78,6 +78,7 @@ Base URL: `http://localhost:5000/api`
 - Configure real `CORS_ORIGIN`.
 - Add PayPal live keys before enabling live billing.
 - Frontend should call `/api/ping` every 5 minutes to keep service warm.
+- Full production guide: `docs/PRODUCTION_DEPLOY_CHECKLIST.md`
 
 ## Publish To GitHub
 
