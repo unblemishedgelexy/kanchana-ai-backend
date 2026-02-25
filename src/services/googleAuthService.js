@@ -33,6 +33,23 @@ const safeEqual = (left, right) => {
   return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 };
 
+const normalizePictureUrl = (value) => {
+  const safeValue = String(value || "").trim();
+  if (!safeValue) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(safeValue);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+};
+
 const toGoogleIdentity = (payload) => {
   if (!payload?.sub || !payload?.email) {
     throw new HttpError(401, "Invalid Google token payload.");
@@ -43,6 +60,7 @@ const toGoogleIdentity = (payload) => {
     email: payload.email,
     name: payload.name || payload.email.split("@")[0],
     emailVerified: Boolean(payload.email_verified),
+    profileImageUrl: normalizePictureUrl(payload.picture),
   };
 };
 

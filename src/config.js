@@ -12,6 +12,22 @@ if (process.env.SKIP_DOTENV !== "true") {
 export const NODE_ENV = process.env.NODE_ENV || "development";
 export const IS_PRODUCTION = NODE_ENV === "production";
 
+const parseBooleanEnv = (value, fallback = false) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+};
+
+const parseNumberEnv = (value, fallback) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return parsed;
+};
+
 export const PORT = Number(process.env.PORT || 5000);
 export const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
 const configuredCorsOrigins = CORS_ORIGIN.split(",")
@@ -87,6 +103,18 @@ export const AI_DEBUG_LOGS = process.env.AI_DEBUG_LOGS === "true";
 export const CHAT_DEBUG_LOGS =
   process.env.CHAT_DEBUG_LOGS === "true" ||
   (process.env.CHAT_DEBUG_LOGS !== "false" && NODE_ENV !== "production" && NODE_ENV !== "test");
+export const BACKEND_AI_KEEPALIVE_ENABLED = parseBooleanEnv(
+  process.env.BACKEND_AI_KEEPALIVE_ENABLED,
+  true
+);
+export const BACKEND_AI_KEEPALIVE_INTERVAL_MS = Math.max(
+  10_000,
+  parseNumberEnv(process.env.BACKEND_AI_KEEPALIVE_INTERVAL_MS, 30_000)
+);
+export const BACKEND_AI_KEEPALIVE_HISTORY_LIMIT = Math.max(
+  2,
+  Math.min(12, parseNumberEnv(process.env.BACKEND_AI_KEEPALIVE_HISTORY_LIMIT, 6))
+);
 export const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 export const GOOGLE_AUTH_SUCCESS_REDIRECT =
   process.env.GOOGLE_AUTH_SUCCESS_REDIRECT || `${FRONTEND_URL}/auth/google/success`;

@@ -14,6 +14,7 @@ import {
   setTier,
   setPasswordHash,
   setGoogleSub,
+  setProfileImageUrl,
   toSafeUser,
 } from "../repositories/userRepository.js";
 import {
@@ -115,6 +116,9 @@ const finalizeGoogleLogin = async ({ googleData, userAgent }) => {
     });
   } else if (!user.googleSub) {
     setGoogleSub(user, googleData.googleSub);
+  }
+  if (googleData.profileImageUrl && !String(user.profileImageUrl || "").trim()) {
+    setProfileImageUrl(user, googleData.profileImageUrl);
   }
 
   const session = createSession();

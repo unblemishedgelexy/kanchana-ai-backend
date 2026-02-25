@@ -52,6 +52,19 @@ export const listRecentByUserMode = async ({ userId, mode, limit = 40 }) => {
     .slice(0, safeLimit);
 };
 
+export const listRecentGlobal = async ({ limit = 40 } = {}) => {
+  const safeLimit = Math.max(1, Math.min(Number(limit || 40), 300));
+
+  if (isMongoConnected()) {
+    return Message.find({}).sort({ createdAt: -1 }).limit(safeLimit);
+  }
+
+  return memoryStore.messages
+    .slice()
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+    .slice(0, safeLimit);
+};
+
 export const listByIds = async ({ userId, ids = [] }) => {
   const normalizedIds = ids.map((id) => String(id || "").trim()).filter(Boolean);
   if (!normalizedIds.length) {
