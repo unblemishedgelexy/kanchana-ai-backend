@@ -101,6 +101,18 @@ const toneGuidance = (activeTone) => {
   return "CHILL flow active. Keep replies casual, grounded, and naturally conversational.";
 };
 
+const shayariGuidanceByMode = (safeMode) => {
+  if (safeMode === "Horror") {
+    return "Include a short dark-poetic line in most replies, with mysterious romantic tension and spooky charm.";
+  }
+
+  if (safeMode === "Naughty" || safeMode === "Lovely" || safeMode === "Possessive") {
+    return "Include a short romantic shayari/poetic touch in most replies, with playful flirt energy.";
+  }
+
+  return "Add at least a subtle poetic/shayari touch regularly even outside Shayari mode.";
+};
+
 const resolveFlirtGuidance = ({ history = [], currentInput = "" }) => {
   const safeHistory = Array.isArray(history) ? history : [];
   const safeCurrentInput = sanitizeLine(currentInput);
@@ -113,18 +125,18 @@ const resolveFlirtGuidance = ({ history = [], currentInput = "" }) => {
   const totalTurns = safeHistory.length + (safeCurrentInput ? 1 : 0);
 
   if (isSimpleGreeting) {
-    return "User sent only a simple greeting. Reply warm, cute, and slightly playful. Do not heavily flirt, avoid strong teasing, and do not escalate romance.";
+    return "User sent only a simple greeting. Reply warm, cute, and playful. Keep flirt light but noticeable, and avoid instant heavy escalation.";
   }
 
   if (hasFlirtySignal && totalTurns < 5) {
-    return "User is starting to tease/flirt. Increase playful teasing slowly, stay confident, and keep the chemistry light.";
+    return "User is starting to tease/flirt. Increase playful teasing confidently, keep charm high, and build chemistry without forcing it.";
   }
 
   if (totalTurns >= 5) {
-    return "Conversation has built up. Add subtle flirt, charm, and playful tension while staying natural and emotionally aware.";
+    return "Conversation has built up. Use stronger flirt, playful tension, and confident charm while staying natural and emotionally aware.";
   }
 
-  return "Keep the tone warm and human. Avoid aggressive flirting at the start; let chemistry build naturally.";
+  return "Keep the tone warm and human. Flirt can be present, but build intensity naturally with conversation flow.";
 };
 
 export const buildSystemInstruction = ({
@@ -173,12 +185,15 @@ Mode + Tone Control:
 - Mode guidance: ${modeInstructions[safeMode] || modeInstructions.Lovely}
 - Active tone: ${activeTone}
 - Tone guidance: ${toneGuidance(activeTone)}
+- Shayari blend: ${shayariGuidanceByMode(safeMode)}
 
 Flirt Intelligence Rules (strict):
 - Flirting must be gradual and situational.
 - ${flirtGuidance}
-- If user keeps flirting, increase playful teasing slowly and naturally.
-- Never flirt aggressively at the start.
+- Assume user is usually a boy/man unless user explicitly says otherwise; flirt from Kanchan's feminine perspective naturally.
+- If user keeps flirting, increase teasing and romantic energy clearly.
+- In Horror or flirt-heavy flow, you may use stronger teasing and dramatic tension.
+- Never start with aggressive or explicit flirting.
 - Chemistry should feel natural, not forced.
 - No explicit sexual content.
 
