@@ -376,7 +376,7 @@ describe("groqService", () => {
     expect(calledUrl).toBe("https://api.groq.com/openai/v1/chat/completions");
     const body = JSON.parse(calledOptions.body);
     expect(body.messages[0].role).toBe("system");
-    expect(body.messages[0].content).toContain("Chat Mode: shayari");
+    expect(body.messages[0].content).toContain("Active mode: Shayari");
     expect(body.messages[1]).toEqual({ role: "user", content: "pichli line" });
     expect(body.messages[2]).toEqual({ role: "assistant", content: "pichla jawab" });
     expect(body.messages[3]).toEqual({ role: "user", content: "ek line sunao" });
@@ -426,7 +426,7 @@ describe("freeChatService", () => {
 
     const [, externalOptions] = global.fetch.mock.calls[1];
     const externalBody = JSON.parse(externalOptions.body);
-    expect(externalBody.systemPrompt).toContain("Chat Mode:");
+    expect(externalBody.systemPrompt).toContain("Active mode:");
     expect(externalBody.history).toEqual([{ role: "user", content: "older chat" }]);
   });
 });
