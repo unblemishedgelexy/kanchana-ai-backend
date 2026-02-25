@@ -28,7 +28,7 @@ import {
 } from "../repositories/guestUsageRepository.js";
 import { encryptForUser, decryptForUser } from "./encryptionService.js";
 import { generateChatReply, generateImageResponse } from "./geminiService.js";
-import { generateExternalFreeReply } from "./kanchanaExternalService.js";
+import { generateFreeTierReply } from "./freeChatService.js";
 import {
   vectorMemoryEnabled,
   upsertMessageVector,
@@ -454,25 +454,24 @@ export const sendMessage = async ({
       const providerHistory = recentHistory.filter((message) => message.id !== userMessageId);
 
       logger.event("chat_generation_started", {
-        provider: "kanchana_external",
+        provider: "free_provider_router",
         historyCount: providerHistory.length,
         memoryCount: 0,
         voiceMode: false,
       });
 
-      assistantText = await generateExternalFreeReply({
-        message: safeText,
+      const freeReply = await generateFreeTierReply({
+        user: actorUser,
+        mode: safeMode,
+        inputText: safeText,
         history: providerHistory,
-        context: {
-          mode: safeMode,
-          tier: actorUser?.tier || "Free",
-          voiceMode: false,
-        },
+        voiceMode: false,
         debug: logger,
       });
+      assistantText = freeReply.text;
 
       logger.event("chat_generation_completed", {
-        provider: "kanchana_external",
+        provider: freeReply.provider || "free_provider_router",
         assistantTextLength: assistantText.length,
         assistantPreview: previewText(assistantText),
       });

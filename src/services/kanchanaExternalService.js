@@ -42,6 +42,7 @@ export const generateExternalFreeReply = async ({
   message,
   history = [],
   context = {},
+  systemPrompt = "",
   debug = null,
 }) => {
   const safeMessage = String(message || "").trim();
@@ -54,16 +55,19 @@ export const generateExternalFreeReply = async ({
   }
 
   const endpoint = resolveEndpoint();
+  const safeSystemPrompt = String(systemPrompt || "").trim();
   const requestPayload = {
     message: safeMessage,
     history: normalizeHistory(history),
     context,
+    ...(safeSystemPrompt ? { systemPrompt: safeSystemPrompt } : {}),
   };
 
   emitDebug(debug, "event", "free_external_request_started", {
     endpoint,
     messageLength: safeMessage.length,
     historyCount: requestPayload.history.length,
+    hasSystemPrompt: Boolean(safeSystemPrompt),
   });
 
   try {

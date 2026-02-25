@@ -7,6 +7,12 @@ const IMAGEKIT_KEYS = [
 ];
 
 const GEMINI_KEYS = ["GEMINI_API_KEY", "GEMINI_CHAT_MODEL", "GEMINI_IMAGE_MODEL", "GEMINI_EMBED_MODEL"];
+const GROQ_KEYS = [
+  "GROQ_API_KEY",
+  "GROQ_CHAT_MODEL",
+  "GROQ_API_BASE_URL",
+  "FREE_CHAT_PROVIDER_ORDER",
+];
 const GOOGLE_KEYS = ["GOOGLE_CLIENT_ID"];
 const EXTERNAL_KEYS = ["APP_API_KEY", "APP_CLIENT_SECRET", "KANCHANA_API_BASE_URL"];
 
@@ -306,6 +312,122 @@ describe("geminiService", () => {
     const image = await service.generateImageResponse({ prompt: "draw moon" });
     expect(image.text).toContain("image ready");
     expect(image.imageUrl).toBe("data:image/png;base64,abcd1234");
+  });
+});
+
+describe("groqService", () => {
+  it("should throw when groq key is missing", async () => {
+    clearEnvKeys(GROQ_KEYS);
+    jest.resetModules();
+
+    const service = await import("../src/services/groqService.js");
+    await expect(
+      service.generateGroqReply({
+        user: { name: "Test", tier: "Free" },
+        mode: "Lovely",
+        inputText: "hello",
+        history: [],
+      })
+    ).rejects.toMatchObject({
+      statusCode: 503,
+      details: {
+        provider: "groq",
+      },
+    });
+  });
+
+  it("should generate reply from groq with system prompt and history", async () => {
+    clearEnvKeys(GROQ_KEYS);
+    process.env.GROQ_API_KEY = "groq-key";
+    process.env.GROQ_API_BASE_URL = "https://api.groq.com/openai/v1";
+    process.env.GROQ_CHAT_MODEL = "llama-3.1-8b-instant";
+
+    jest.resetModules();
+    const service = await import("../src/services/groqService.js");
+
+    global.fetch = jest.fn().mockResolvedValue(
+      makeJsonResponse({
+        payload: {
+          choices: [
+            {
+              message: {
+                content: "Groq says hello",
+              },
+            },
+          ],
+        },
+      })
+    );
+
+    const text = await service.generateGroqReply({
+      user: { name: "Neo", tier: "Free" },
+      mode: "Shayari",
+      inputText: "ek line sunao",
+      history: [
+        { role: "user", text: "pichli line" },
+        { role: "kanchana", text: "pichla jawab" },
+      ],
+    });
+
+    expect(text).toBe("Groq says hello");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    const [calledUrl, calledOptions] = global.fetch.mock.calls[0];
+    expect(calledUrl).toBe("https://api.groq.com/openai/v1/chat/completions");
+    const body = JSON.parse(calledOptions.body);
+    expect(body.messages[0].role).toBe("system");
+    expect(body.messages[0].content).toContain("Chat Mode: shayari");
+    expect(body.messages[1]).toEqual({ role: "user", content: "pichli line" });
+    expect(body.messages[2]).toEqual({ role: "assistant", content: "pichla jawab" });
+    expect(body.messages[3]).toEqual({ role: "user", content: "ek line sunao" });
+  });
+});
+
+describe("freeChatService", () => {
+  it("should fallback to kanchana external when groq fails", async () => {
+    clearEnvKeys([...GROQ_KEYS, ...EXTERNAL_KEYS]);
+    process.env.GROQ_API_KEY = "groq-key";
+    process.env.GROQ_API_BASE_URL = "https://api.groq.com/openai/v1";
+    process.env.FREE_CHAT_PROVIDER_ORDER = "groq,kanchana_external";
+    process.env.APP_API_KEY = "app-key";
+    process.env.APP_CLIENT_SECRET = "client-secret";
+    process.env.KANCHANA_API_BASE_URL = "https://ai.example.com";
+
+    jest.resetModules();
+    const service = await import("../src/services/freeChatService.js");
+
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => JSON.stringify({ error: { message: "Rate limit" } }),
+      })
+      .mockResolvedValueOnce(
+        makeJsonResponse({
+          payload: {
+            reply: "External fallback reply",
+          },
+        })
+      );
+
+    const reply = await service.generateFreeTierReply({
+      user: { name: "Neo", tier: "Free" },
+      mode: "Lovely",
+      inputText: "hello",
+      history: [{ role: "user", text: "older chat" }],
+    });
+
+    expect(reply).toEqual({
+      text: "External fallback reply",
+      provider: "kanchana_external",
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    const [, externalOptions] = global.fetch.mock.calls[1];
+    const externalBody = JSON.parse(externalOptions.body);
+    expect(externalBody.systemPrompt).toContain("Chat Mode:");
+    expect(externalBody.history).toEqual([{ role: "user", content: "older chat" }]);
   });
 });
 

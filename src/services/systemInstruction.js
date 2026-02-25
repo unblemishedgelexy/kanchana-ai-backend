@@ -17,6 +17,7 @@ const playfulPoeticRegex =
 
 const providerAvailability = () => ({
   gemini: Boolean(process.env.GEMINI_API_KEY),
+  groq: Boolean(process.env.GROQ_API_KEY),
   kanchanaExternal: Boolean(process.env.APP_API_KEY && process.env.APP_CLIENT_SECRET),
 });
 
@@ -131,6 +132,7 @@ export const buildSystemInstruction = ({
 Current AI Provider: ${providerName}
 Known AI Providers Configured:
 - Gemini via Google Generative AI (${providers.gemini ? "configured" : "not configured"} / models like gemini-2.5-flash, gemini-3-pro)
+- Groq Chat API (${providers.groq ? "configured" : "not configured"} / model like llama-3.1-8b-instant)
 - Kanchana External Chat API (${providers.kanchanaExternal ? "configured" : "not configured"} / /v1/chat)
 
 User Info:

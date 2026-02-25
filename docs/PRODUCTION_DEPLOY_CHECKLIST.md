@@ -48,10 +48,14 @@ Required for core app:
 - `TOKEN_TTL_DAYS=30`
 - `PASSWORD_RESET_TTL_MINUTES=20`
 
-AI required:
+AI required (set at least one free provider):
 
+- `GROQ_API_KEY=<groq-api-key>`
+- `GROQ_CHAT_MODEL=llama-3.1-8b-instant`
+- `FREE_CHAT_PROVIDER_ORDER=groq,kanchana_external`
 - `APP_API_KEY=<kanchana-api-key>`
 - `APP_CLIENT_SECRET=<kanchana-client-secret>`
+- `KANCHANA_API_BASE_URL=https://kanchana-ai-model.onrender.com`
 - `GEMINI_API_KEY=<gemini-api-key>`
 - `GUEST_MODE_MESSAGE_LIMIT=7`
 - `FREE_MODE_MESSAGE_LIMIT=10`

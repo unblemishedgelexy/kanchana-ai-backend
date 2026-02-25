@@ -10,7 +10,7 @@ Production-focused Express backend with:
 - premium/free/guest/host chat and voice limits enforced in backend
 - PayPal payment + subscription (autopay) endpoints
 - ImageKit cloud storage for profile/upgrade assets and generated images
-- free tier chat via external Kanchana model API (`/v1/chat`)
+- free tier chat via provider chain (Groq primary + external Kanchana fallback)
 - Gemini for premium chat/voice and premium image generation
 - optional Pinecone vector memory for premium semantic recall
 - keep-alive ping route for Render deployments
@@ -25,7 +25,7 @@ Production-focused Express backend with:
    ```bash
    cp .env.example .env
    ```
-3. Fill required values in `.env` (`APP_API_KEY`, `APP_CLIENT_SECRET`, `GEMINI_API_KEY`, DB, Google OAuth callback vars, etc.).
+3. Fill required values in `.env` (`GROQ_API_KEY` recommended for free-tier primary, `APP_API_KEY` + `APP_CLIENT_SECRET` for fallback, `GEMINI_API_KEY`, DB, Google OAuth callback vars, etc.).
 4. Start server:
    ```bash
    npm run dev

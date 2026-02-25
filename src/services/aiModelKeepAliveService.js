@@ -4,11 +4,12 @@ import {
   BACKEND_AI_KEEPALIVE_ENABLED,
   BACKEND_AI_KEEPALIVE_HISTORY_LIMIT,
   BACKEND_AI_KEEPALIVE_INTERVAL_MS,
-  KANCHANA_API_BASE_URL,
+  FREE_CHAT_PROVIDER_ORDER,
+  GROQ_API_KEY,
 } from "../config.js";
 import { listRecentGlobal } from "../repositories/messageRepository.js";
 import { decryptForUser } from "./encryptionService.js";
-import { generateExternalFreeReply } from "./kanchanaExternalService.js";
+import { generateFreeTierReply } from "./freeChatService.js";
 
 let keepAliveTimer = null;
 let keepAliveInFlight = false;
@@ -79,16 +80,17 @@ const runKeepAliveTick = async () => {
       ? `Warmup ping for model readiness. Latest user intent sample: "${latestUserText}"`
       : "Warmup ping for model readiness. Stay prepared for the next conversation.";
 
-    await generateExternalFreeReply({
-      message: warmupMessage,
-      history,
-      context: {
-        mode: "Lovely",
+    await generateFreeTierReply({
+      user: {
+        id: "keepalive_worker",
+        name: "Kanchana Keepalive",
         tier: "Free",
-        voiceMode: false,
-        keepAlive: true,
-        source: "backend_ai_model_keepalive",
+        role: "normal",
       },
+      mode: "Lovely",
+      inputText: warmupMessage,
+      history,
+      voiceMode: false,
     });
   } catch (error) {
     // eslint-disable-next-line no-console
@@ -103,11 +105,14 @@ const canStartKeepAlive = () => {
     return false;
   }
 
-  if (!String(KANCHANA_API_BASE_URL || "").trim()) {
-    return false;
-  }
+  const providerOrder = Array.isArray(FREE_CHAT_PROVIDER_ORDER) ? FREE_CHAT_PROVIDER_ORDER : [];
+  const groqEnabled = providerOrder.includes("groq") && String(GROQ_API_KEY || "").trim();
+  const externalEnabled =
+    providerOrder.includes("kanchana_external") &&
+    String(APP_API_KEY || "").trim() &&
+    String(APP_CLIENT_SECRET || "").trim();
 
-  if (!String(APP_API_KEY || "").trim() || !String(APP_CLIENT_SECRET || "").trim()) {
+  if (!groqEnabled && !externalEnabled) {
     return false;
   }
 
@@ -146,4 +151,3 @@ export const startAiModelKeepAliveLoop = () => {
 
   return stopAiModelKeepAliveLoop;
 };
-

@@ -28,6 +28,18 @@ const parseNumberEnv = (value, fallback) => {
   return parsed;
 };
 
+const parseListEnv = (value, fallback = []) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return [...fallback];
+  }
+
+  return normalized
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+};
+
 export const PORT = Number(process.env.PORT || 5000);
 export const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
 const configuredCorsOrigins = CORS_ORIGIN.split(",")
@@ -65,6 +77,13 @@ export const GEMINI_CHAT_MODEL =
   process.env.GEMINI_CHAT_MODEL || process.env.GEMINI_MODEL || "gemini-2.0-flash";
 export const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
 export const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "text-embedding-004";
+export const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+export const GROQ_API_BASE_URL = process.env.GROQ_API_BASE_URL || "https://api.groq.com/openai/v1";
+export const GROQ_CHAT_MODEL = process.env.GROQ_CHAT_MODEL || "llama-3.1-8b-instant";
+export const FREE_CHAT_PROVIDER_ORDER = parseListEnv(process.env.FREE_CHAT_PROVIDER_ORDER, [
+  "groq",
+  "kanchana_external",
+]);
 export const KANCHANA_API_BASE_URL =
   process.env.KANCHANA_API_BASE_URL || "https://kanchana-ai-model.onrender.com";
 export const APP_API_KEY = process.env.APP_API_KEY || process.env.KANCHANA_API_KEY || "";
